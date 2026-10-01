@@ -6,75 +6,17 @@
 <title>مرتب‌ساز مسیر پخش بسته</title>
 <style>
   * { box-sizing: border-box; }
-  body {
-    font-family: Tahoma, sans-serif;
-    background: #f0f4f8;
-    margin: 0;
-    padding: 15px;
-    color: #222;
-  }
+  body { font-family: Tahoma, sans-serif; background: #f0f4f8; margin: 0; padding: 15px; color: #222; }
   h1 { font-size: 20px; text-align: center; color: #1a5490; }
-  .card {
-    background: white;
-    border-radius: 12px;
-    padding: 15px;
-    margin-bottom: 15px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  }
+  .card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
   label { font-weight: bold; display: block; margin-bottom: 8px; }
-  textarea {
-    width: 100%;
-    height: 200px;
-    padding: 10px;
-    border: 2px solid #cbd5e0;
-    border-radius: 8px;
-    font-family: Tahoma, sans-serif;
-    font-size: 14px;
-    resize: vertical;
-    direction: rtl;
-  }
-  button {
-    width: 100%;
-    padding: 14px;
-    margin-top: 10px;
-    background: #1a5490;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 16px;
-    font-weight: bold;
-    cursor: pointer;
-  }
+  textarea { width: 100%; height: 200px; padding: 10px; border: 2px solid #cbd5e0; border-radius: 8px; font-family: Tahoma, sans-serif; font-size: 14px; resize: vertical; direction: rtl; }
+  button { width: 100%; padding: 14px; margin-top: 10px; background: #1a5490; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
   button:disabled { background: #94a3b8; }
   button.green { background: #16a34a; }
-  .status {
-    text-align: center;
-    padding: 10px;
-    font-size: 14px;
-    color: #555;
-  }
-  .result-item {
-    background: #f8fafc;
-    border-right: 4px solid #1a5490;
-    padding: 12px;
-    margin-bottom: 8px;
-    border-radius: 6px;
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-  }
-  .num {
-    background: #1a5490;
-    color: white;
-    min-width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-    flex-shrink: 0;
-  }
+  .status { text-align: center; padding: 10px; font-size: 14px; color: #555; }
+  .result-item { background: #f8fafc; border-right: 4px solid #1a5490; padding: 12px; margin-bottom: 8px; border-radius: 6px; display: flex; align-items: flex-start; gap: 10px; }
+  .num { background: #1a5490; color: white; min-width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
   .addr { font-size: 14px; line-height: 1.6; word-break: break-word; }
   .hidden { display: none; }
 </style>
@@ -90,7 +32,7 @@
   </div>
 
   <label>📝 آدرس‌ها رو وارد کن (هر خط یه آدرس):</label>
-  <textarea id="addresses" placeholder="تهران، خیابان آزادی، کوچه بهار، پلاک ۵&#10;کرج، میدان طالقانی، خیابان شهید بهشتی&#10;..."></textarea>
+  <textarea id="addresses" placeholder="کرج، عظیمیه، میدان اسبی&#10;کرج، گوهردشت، سه راه&#10;..."></textarea>
 
   <button id="btnSort" onclick="sortAddresses()">🔄 مرتب کن بر اساس مسیر بهینه</button>
   <div class="status" id="status"></div>
@@ -105,10 +47,9 @@
 <script>
 const API_KEY = "service.a5b2efdc8b074529ab57d17d5c8d14b5";
 const ORIGIN_ADDRESS = "نقطه مبادله امانت پستی پیام، کرج";
-
 let sortedResults = [];
 
-// تابع ۱: تبدیل آدرس به مختصات
+// تبدیل آدرس به مختصات
 async function geocode(address) {
   const url = `https://api.neshan.org/v4/geocoding?address=${encodeURIComponent(address)}`;
   const res = await fetch(url, { headers: { "Api-Key": API_KEY } });
@@ -117,78 +58,72 @@ async function geocode(address) {
   return { lat: data.location.y, lng: data.location.x };
 }
 
-// تابع ۲: گرفتن ماتریس فاصله بین چند نقطه
-async function getDistanceMatrix(points) {
-  const url = "https://api.neshan.org/v4/distance-matrix";
-  const body = {
-    origins: points.map(p => ({ lat: p.lat, lng: p.lng })),
-    destinations: points.map(p => ({ lat: p.lat, lng: p.lng }))
-  };
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Api-Key": API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error(`Distance matrix failed: ${res.status}`);
-  const data = await res.json();
-  return data.rows;
+// فاصله بین دو نقطه با فرمول Haversine (کیلومتر)
+function haversine(p1, p2) {
+  const R = 6371;
+  const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+  const dLng = (p2.lng - p1.lng) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) *
+            Math.sin(dLng/2) * Math.sin(dLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
 }
 
-// تابع ۳: الگوریتم Nearest Neighbor برای پیدا کردن ترتیب
-function nearestNeighbor(distanceMatrix, n) {
+// ماتریس فاصله (محلی)
+function buildDistanceMatrix(points) {
+  const n = points.length;
+  const matrix = [];
+  for (let i = 0; i < n; i++) {
+    matrix[i] = [];
+    for (let j = 0; j < n; j++) {
+      matrix[i][j] = haversine(points[i], points[j]);
+    }
+  }
+  return matrix;
+}
+
+// الگوریتم Nearest Neighbor
+function nearestNeighbor(matrix, n) {
   const visited = new Array(n).fill(false);
-  const order = [0]; // از مبدأ شروع
+  const order = [0];
   visited[0] = true;
-  
   for (let i = 1; i < n; i++) {
     const last = order[order.length - 1];
     let nearest = -1;
     let minDist = Infinity;
-    
     for (let j = 0; j < n; j++) {
-      if (!visited[j] && distanceMatrix[last][j].distance.value < minDist) {
-        minDist = distanceMatrix[last][j].distance.value;
+      if (!visited[j] && matrix[last][j] < minDist) {
+        minDist = matrix[last][j];
         nearest = j;
       }
     }
-    
     if (nearest === -1) break;
     order.push(nearest);
     visited[nearest] = true;
   }
-  
   return order;
 }
 
-// تابع اصلی
 async function sortAddresses() {
   const btn = document.getElementById("btnSort");
   const status = document.getElementById("status");
   const textarea = document.getElementById("addresses").value.trim();
-  
-  if (!textarea) {
-    alert("لطفاً آدرس‌ها رو وارد کن!");
-    return;
-  }
-  
+
+  if (!textarea) { alert("لطفاً آدرس‌ها رو وارد کن!"); return; }
   const addresses = textarea.split("\n").map(a => a.trim()).filter(a => a);
-  if (addresses.length < 2) {
-    alert("حداقل ۲ تا آدرس لازمه!");
-    return;
-  }
-  
+  if (addresses.length < 2) { alert("حداقل ۲ تا آدرس لازمه!"); return; }
+
   btn.disabled = true;
-  
+
   try {
-    // مرحله ۱: گرفتن مختصات انبار
     status.textContent = "📍 در حال پیدا کردن انبار...";
     const originPoint = await geocode(ORIGIN_ADDRESS);
-    
-    // مرحله ۲: گرفتن مختصات همه آدرس‌ها
+
     status.textContent = `📍 در حال پیدا کردن ${addresses.length} آدرس...`;
     const points = [originPoint];
     const validAddresses = [];
-    
+
     for (let i = 0; i < addresses.length; i++) {
       status.textContent = `📍 آدرس ${i+1} از ${addresses.length}...`;
       try {
@@ -199,22 +134,17 @@ async function sortAddresses() {
         console.warn("پیدا نشد:", addresses[i]);
       }
     }
-    
-    if (points.length < 2) {
-      throw new Error("هیچ آدرسی پیدا نشد!");
-    }
-    
-    // مرحله ۳: ماتریس فاصله
+
+    if (points.length < 2) throw new Error("هیچ آدرسی پیدا نشد!");
+
     status.textContent = "📊 در حال محاسبه فاصله‌ها...";
-    const matrix = await getDistanceMatrix(points);
-    
-    // مرحله ۴: مرتب‌سازی
+    const matrix = buildDistanceMatrix(points);
+
     status.textContent = "🔄 در حال مرتب‌سازی...";
     const order = nearestNeighbor(matrix, points.length);
-    
-    // مرحله ۵: نمایش نتیجه (بدون انبار، چون خودت می‌ری انبار)
+
     sortedResults = order.slice(1).map(idx => validAddresses[idx - 1]);
-    
+
     const resultsDiv = document.getElementById("results");
     resultsDiv.innerHTML = "";
     sortedResults.forEach((addr, i) => {
@@ -223,10 +153,10 @@ async function sortAddresses() {
       div.innerHTML = `<div class="num">${i+1}</div><div class="addr">${addr}</div>`;
       resultsDiv.appendChild(div);
     });
-    
+
     document.getElementById("resultCard").classList.remove("hidden");
     status.textContent = `✅ ${sortedResults.length} آدرس مرتب شد!`;
-    
+
   } catch (e) {
     status.textContent = "❌ خطا: " + e.message;
     console.error(e);
@@ -235,13 +165,11 @@ async function sortAddresses() {
   }
 }
 
-// دانلود CSV
 function downloadCSV() {
   let csv = "order,address\n";
   sortedResults.forEach((addr, i) => {
     csv += `${i+1},"${addr.replace(/"/g, '""')}"\n`;
   });
-  
   const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
