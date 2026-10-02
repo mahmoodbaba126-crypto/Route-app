@@ -16,7 +16,6 @@
   button.green { background: #16a34a; }
   button.gray { background: #64748b; }
   button.blue { background: #0ea5e9; }
-  button.purple { background: #7c3aed; }
   button.red { background: #ef4444; }
   .row-btns { display: flex; gap: 8px; }
   .row-btns button { flex: 1; margin-top: 8px; }
@@ -27,7 +26,6 @@
   .gmap-btn { background: #4285f4; padding: 8px 12px; margin: 0; font-size: 12px; width: auto; white-space: nowrap; }
   .hidden { display: none; }
   #qr-reader { width: 100%; max-width: 400px; margin: 10px auto; border-radius: 10px; overflow: hidden; }
-  .scanner-box { text-align: center; margin-top: 10px; }
   .play-mode { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f0f4f8; z-index: 9999; padding: 20px; overflow-y: auto; }
   .play-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
   .play-header h2 { margin: 0; font-size: 18px; color: #1a5490; }
@@ -130,15 +128,15 @@ function normalizeDigits(text) {
 // ============ Geocoding (عادی یا پلاس) ============
 async function geocode(address) {
   const normalized = normalizeDigits(address);
-  const hasPostal = /\b\d{10}\b/.test(normalized);
   const isJustPostal = /^\s*\d{10}\s*$/.test(normalized);
 
+  // اگه فقط کد پستی بود، «کرج فردیس» رو جلوش اضافه کن
   let finalAddress = address;
-  
-  // اگه فقط کد پستی بود (بدون آدرس)، «کرج فردیس» رو جلوش اضافه کن
   if (isJustPostal) {
     finalAddress = "کرج فردیس " + address;
   }
+
+  const hasPostal = /\b\d{10}\b/.test(normalizeDigits(finalAddress));
 
   let url;
   if (hasPostal) {
@@ -146,12 +144,6 @@ async function geocode(address) {
   } else {
     url = `https://api.neshan.org/v4/geocoding?address=${encodeURIComponent(finalAddress)}`;
   }
-
-  const res = await fetch(url, { headers: { "Api-Key": GEO_KEY } });
-  if (!res.ok) throw new Error(`Geocoding failed: ${res.status}`);
-  const data = await res.json();
-  return { lat: data.location.y, lng: data.location.x };
-}
 
   const res = await fetch(url, { headers: { "Api-Key": GEO_KEY } });
   if (!res.ok) throw new Error(`Geocoding failed: ${res.status}`);
@@ -220,7 +212,11 @@ function startScanner() {
   if (scanner) return;
 
   scanner = new Html5Qrcode("qr-reader");
-  const config = { fps: 10, qrbox: { width: 280, height: 160 } };
+  const config = { 
+    fps: 15, 
+    qrbox: { width: 350, height: 150 },
+    aspectRatio: 1.777778
+  };
 
   scanner.start(
     { facingMode: "environment" },
