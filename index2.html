@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مرتب‌ساز مسیر پخش بسته</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Tahoma, sans-serif; background: #f0f4f8; margin: 0; padding: 15px; color: #222; }
+  h1 { font-size: 20px; text-align: center; color: #1a5490; }
+  .card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  label { font-weight: bold; display: block; margin-bottom: 8px; }
+  textarea { width: 100%; height: 180px; padding: 10px; border: 2px solid #cbd5e0; border-radius: 8px; font-family: Tahoma, sans-serif; font-size: 14px; resize: vertical; direction: rtl; }
+  button { width: 100%; padding: 14px; margin-top: 10px; background: #1a5490; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
+  button:disabled { background: #94a3b8; }
+  button.green { background: #16a34a; }
+  button.gray { background: #64748b; }
+  .status { text-align: center; padding: 10px; font-size: 14px; color: #555; }
+  .result-item { background: #f8fafc; border-right: 4px solid #1a5490; padding: 12px; margin-bottom: 8px; border-radius: 6px; display: flex; align-items: center; gap: 10px; }
+  .num { background: #1a5490; color: white; min-width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
+  .addr { font-size: 14px; line-height: 1.6; word-break: break-word; flex: 1; }
+  .nav-btns { display: flex; gap: 5px; }
+  .nav-btns button { width: auto; padding: 6px 10px; margin: 0; font-size: 12px; }
+  .nav-btns .n1 { background: #1a5490; }
+  .nav-btns .n2 { background: #16a34a; }
+  #map { width: 100%; height: 300px; border-radius: 10px; margin-top: 10px; }
+  .hidden { display: none; }
+  .play-mode { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: white; z-index: 9999; padding: 20px; overflow-y: auto; }
+  .play-current { background: #e8f4ff; border: 3px solid #1a5490; border-radius: 12px; padding: 20px; margin: 20px 0; text-align: center; }
+  .play-current .big-num { font-size: 48px; font-weight: bold; color: #1a5490; }
+  .play-current .big-addr { font-size: 18px; margin-top: 15px; line-height: 1.8; }
+  .play-btns { display: flex; gap: 10px; margin-top: 15px; }
+  .play-btns button { flex: 1; }
+</style>
+</head>
+<body>
+
+<div id="mainApp">
+  <h1>🚚 مرتب‌ساز مسیر پخش بسته</h1>
+
+  <div class="card">
+    <label>📍 مبدأ (انبار):</label>
+    <div style="background:#e8f4ff;padding:10px;border-radius:6px;font-size:13px;margin-bottom:15px;">
+      نقطه مبادله امانت پستی پیام، کرج
+    </div>
+
+    <label>📝 آدرس‌ها رو وارد کن (هر خط یه آدرس):</label>
+    <textarea id="addresses" placeholder="کرج، عظیمیه، میدان اسبی&#10;کرج، گوهردشت، سه راه&#10;..."></textarea>
+
+    <button id="btnSort" onclick="sortAddresses()">🔄 مرتب کن بر اساس مسیر بهینه</button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="card hidden" id="resultCard">
+    <label>✅ ترتیب بهینه:</label>
+    <div id="map"></div>
+    <div id="results" style="margin-top:15px;"></div>
+    <button class="green" onclick="downloadCSV()">📥 دانلود فایل CSV برای Zeo</button>
+    <button class="gray" onclick="startPlayMode()">🚀 شروع پخش (حالت ناوبری)</button>
+  </div>
+</div>
+
+<div id="playMode" class="play-mode hidden">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <div style="font-weight:bold;font-size:16px;">حالت پخش</div>
+    <button onclick="exitPlayMode()" style="width:auto;padding:8px 14px;background:#ef4444;margin:0;">✕ خروج</button>
+  </div>
+  <div class="play-current">
+    <div class="big-num" id="playNum">1</div>
+    <div style="font-size:14px;color:#666;margin-top:5px;" id="playCounter">از 0</div>
+    <div class="big-addr" id="playAddr">-</div>
+  </div>
+  <div class="play-btns">
+    <button class="green" onclick="openNavigation()">🧭 ناوبری</button>
+    <button class="gray" onclick="nextAddress()">بعدی ←</button>
+  </div>
+</div>
+
+<script src="https://api.neshan.org/sdk/mapboxgl/v3.2/neshan-sdk.js"></script>
+<script>
+const GEO_KEY = "service.a5b2efdc8b074529ab57d17d5c8d14b5";
+const MAP_KEY = "web.9f44632954c74c718c721fa4ddc700b0";
+const ORIGIN_ADDRESS = "نقطه مبادله امانت پستی پیام، کرج";
+
+let sortedResults = [];
+let sortedPoints = [];
+let originPoint = null;
+let map = null;
+let playIndex = 0;
+
+async function geocode(address) {
+  const url = `https://api.neshan.org/v4/geocoding?address=${encodeURIComponent(address)}`;
+  const res = await fetch(url, { headers: { "Api-Key": GEO_KEY } });
+  if (!res.ok) throw new Error(`Geocoding failed: ${res.status}`);
+  const data = await res.json();
+  return { lat: data.location.y, lng: data.location.x };
+}
+
+function haversine(p1, p2) {
+  const R = 6371;
+  const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+  const dLng = (p2.lng - p1.lng) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(p1.lat*Math.PI/180)*Math.cos(p2.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function buildDistanceMatrix(points) {
+  const n = points.length;
+  const m = [];
+  for (let i=0;i<n;i++){ m[i]=[]; for (let j=0;j<n;j++) m[i][j]=haversine(points[i],points[j]); }
+  return m;
+}
+
+function nearestNeighbor(matrix, n) {
+  const visited = new Array(n).fill(false);
+  const order = [0]; visited[0] = true;
+  for (let i=1;i<n;i++){
+    const last = order[order.length-1];
+    let nearest=-1, minD=Infinity;
+    for (let j=0;j<n;j++){
+      if (!visited[j] && matrix[last][j] < minD) { minD = matrix[last][j]; nearest = j; }
+    }
+    if (nearest===-1) break;
+    order.push(nearest); visited[nearest]=true;
+  }
+  return order;
+}
+
+async function sortAddresses() {
+  const btn = document.getElementById("btnSort");
+  const status = document.getElementById("status");
+  const textarea = document.getElementById("addresses").value.trim();
+
+  if (!textarea) { alert("آدرس‌ها رو وارد کن!"); return; }
+  const addresses = textarea.split("\n").map(a=>a.trim()).filter(a=>a);
+  if (addresses.length < 2) { alert("حداقل ۲ تا آدرس!"); return; }
+
+  btn.disabled = true;
+  try {
+    status.textContent = "📍 پیدا کردن انبار...";
+    originPoint = await geocode(ORIGIN_ADDRESS);
+
+    status.textContent = `📍 پیدا کردن ${addresses.length} آدرس...`;
+    const points = [originPoint];
+    const valid = [];
+    for (let i=0;i<addresses.length;i++){
+      status.textContent = `📍 آدرس ${i+1} از ${addresses.length}...`;
+      try {
+        const p = await geocode(addresses[i]);
+        points.push(p); valid.push(addresses[i]);
+      } catch(e) { console.warn("پیدا نشد:", addresses[i]); }
+    }
+    if (points.length < 2) throw new Error("هیچ آدرسی پیدا نشد!");
+
+    status.textContent = "📊 محاسبه فاصله‌ها...";
+    const matrix = buildDistanceMatrix(points);
+
+    status.textContent = "🔄 مرتب‌سازی...";
+    const order = nearestNeighbor(matrix, points.length);
+
+    sortedResults = [];
+    sortedPoints = [];
+    order.slice(1).forEach(idx => {
+      sortedResults.push(valid[idx-1]);
+      sortedPoints.push(points[idx]);
+    });
+
+    const resultsDiv = document.getElementById("results");
+    resultsDiv.innerHTML = "";
+    sortedResults.forEach((addr, i) => {
+      const div = document.createElement("div");
+      div.className = "result-item";
+      div.innerHTML = `
+        <div class="num">${i+1}</div>
+        <div class="addr">${addr}</div>
+        <div class="nav-btns">
+          <button class="n1" onclick="navTo(${i},'neshan')">نشان</button>
+          <button class="n2" onclick="navTo(${i},'google')">گوگل</button>
+        </div>`;
+      resultsDiv.appendChild(div);
+    });
+
+    document.getElementById("resultCard").classList.remove("hidden");
+    status.textContent = `✅ ${sortedResults.length} آدرس مرتب شد!`;
+
+    drawMap();
+  } catch(e) {
+    status.textContent = "❌ خطا: " + e.message;
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function drawMap() {
+  if (map) { map.remove(); map = null; }
+  map = new nmp_mapboxgl.Map({
+    container: 'map',
+    mapType: nmp_mapboxgl.Map.mapTypes.neshanVector,
+    center: [sortedPoints[0].lng, sortedPoints[0].lat],
+    zoom: 12,
+    pitch: 0,
+    minZoom: 8,
+    maxZoom: 18,
+    mapKey: MAP_KEY,
+    poi: false,
+    traffic: false
+  });
+
+  map.on('load', () => {
+    // نقاط آدرس‌ها
+    sortedPoints.forEach((p, i) => {
+      const el = document.createElement('div');
+      el.style.cssText = 'background:#1a5490;color:white;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:14px;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);';
+      el.textContent = (i+1);
+      new nmp_mapboxgl.Marker({ element: el }).setLngLat([p.lng, p.lat]).addTo(map);
+    });
+
+    // انبار
+    const originEl = document.createElement('div');
+    originEl.style.cssText = 'background:#dc2626;color:white;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:18px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);';
+    originEl.textContent = '🏠';
+    new nmp_mapboxgl.Marker({ element: originEl }).setLngLat([originPoint.lng, originPoint.lat]).addTo(map);
+
+    // خط مسیر
+    const lineCoords = [originPoint, ...sortedPoints].map(p => [p.lng, p.lat]);
+    map.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } } });
+    map.addLayer({ id: 'route', type: 'line', source: 'route', paint: { 'line-color': '#1a5490', 'line-width': 3, 'line-opacity': 0.6 } });
+
+    // فیت کردن نقشه
+    const bounds = lineCoords.reduce((b, c) => b.extend(c), new nmp_mapboxgl.LngLatBounds(lineCoords[0], lineCoords[0]));
+    map.fitBounds(bounds, { padding: 40 });
+  });
+}
+
+function navTo(index, provider) {
+  const p = sortedPoints[index];
+  if (provider === 'neshan') {
+    window.open(`https://neshan.org/maps/navigation/${p.lat},${p.lng}`, '_blank');
+  } else {
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`, '_blank');
+  }
+}
+
+function startPlayMode() {
+  playIndex = 0;
+  document.getElementById("mainApp").classList.add("hidden");
+  document.getElementById("playMode").classList.remove("hidden");
+  updatePlayView();
+}
+
+function updatePlayView() {
+  if (playIndex >= sortedResults.length) {
+    document.getElementById("playAddr").textContent = "🎉 همه آدرس‌ها تموم شد!";
+    document.getElementById("playNum").textContent = "✓";
+    document.getElementById("playCounter").textContent = "";
+    return;
+  }
+  document.getElementById("playNum").textContent = (playIndex+1);
+  document.getElementById("playCounter").textContent = `از ${sortedResults.length}`;
+  document.getElementById("playAddr").textContent = sortedResults[playIndex];
+}
+
+function nextAddress() { playIndex++; updatePlayView(); }
+
+function openNavigation() {
+  if (playIndex >= sortedResults.length) return;
+  const p = sortedPoints[playIndex];
+  window.open(`https://neshan.org/maps/navigation/${p.lat},${p.lng}`, '_blank');
+}
+
+function exitPlayMode() {
+  document.getElementById("playMode").classList.add("hidden");
+  document.getElementById("mainApp").classList.remove("hidden");
+}
+
+function downloadCSV() {
+  let csv = "order,address,lat,lng\n";
+  sortedResults.forEach((addr, i) => {
+    csv += `${i+1},"${addr.replace(/"/g,'""')}",${sortedPoints[i].lat},${sortedPoints[i].lng}\n`;
+  });
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `route-${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+
+</body>
+</html>
