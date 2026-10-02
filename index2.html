@@ -113,7 +113,6 @@ let sortedPoints = [];
 let playIndex = 0;
 let scanner = null;
 
-// ============ تبدیل اعداد فارسی به انگلیسی ============
 function normalizeDigits(text) {
   const persian = "۰۱۲۳۴۵۶۷۸۹";
   const english = "0123456789";
@@ -125,12 +124,10 @@ function normalizeDigits(text) {
   return result;
 }
 
-// ============ Geocoding (عادی یا پلاس) ============
 async function geocode(address) {
   const normalized = normalizeDigits(address);
   const isJustPostal = /^\s*\d{10}\s*$/.test(normalized);
 
-  // اگه فقط کد پستی بود، «کرج فردیس» رو جلوش اضافه کن
   let finalAddress = address;
   if (isJustPostal) {
     finalAddress = "کرج فردیس " + address;
@@ -140,17 +137,21 @@ async function geocode(address) {
 
   let url;
   if (hasPostal) {
-    url = `https://api.neshan.org/v4/geocoding/plus?address=${encodeURIComponent(finalAddress)}`;
-  } else {
     url = `https://api.neshan.org/geocoding/v1/plus?address=${encodeURIComponent(finalAddress)}`;
+  } else {
+    url = `https://api.neshan.org/v4/geocoding?address=${encodeURIComponent(finalAddress)}`;
+  }
 
   const res = await fetch(url, { headers: { "Api-Key": GEO_KEY } });
   if (!res.ok) throw new Error(`Geocoding failed: ${res.status}`);
   const data = await res.json();
+  
+  if (hasPostal && data.items && data.items.length > 0) {
+    return { lat: data.items[0].location.y, lng: data.items[0].location.x };
+  }
   return { lat: data.location.y, lng: data.location.x };
 }
 
-// ============ محاسبه فاصله ============
 function haversine(p1, p2) {
   const R = 6371;
   const dLat = (p2.lat - p1.lat) * Math.PI / 180;
@@ -205,18 +206,11 @@ function nearestNeighbor(matrix, n) {
   return order;
 }
 
-// ============ اسکنر ============
 function startScanner() {
   const status = document.getElementById("status");
   if (scanner) return;
-
   scanner = new Html5Qrcode("qr-reader");
-  const config = { 
-    fps: 15, 
-    qrbox: { width: 350, height: 150 },
-    aspectRatio: 1.777778
-  };
-
+  const config = { fps: 15, qrbox: { width: 350, height: 150 }, aspectRatio: 1.777778 };
   scanner.start(
     { facingMode: "environment" },
     config,
@@ -243,7 +237,6 @@ function stopScanner() {
   }
 }
 
-// ============ مرتب‌سازی ============
 async function sortAddresses(mode) {
   const btnFast = document.getElementById("btnFast");
   const btnAcc = document.getElementById("btnAccurate");
@@ -321,13 +314,11 @@ async function sortAddresses(mode) {
   }
 }
 
-// ============ نقشه گوگل ============
 function openGoogleMapsFor(index) {
   const p = sortedPoints[index];
   window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=driving`, '_blank');
 }
 
-// ============ حالت پخش ============
 function startPlayMode() {
   if (sortedResults.length === 0) return;
   playIndex = 0;
@@ -371,7 +362,6 @@ function exitPlayMode() {
   document.getElementById("mainApp").classList.remove("hidden");
 }
 
-// ============ دانلود CSV ============
 function downloadCSV() {
   let csv = "order,address,lat,lng\n";
   sortedResults.forEach((addr, i) => {
