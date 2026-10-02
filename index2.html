@@ -142,8 +142,7 @@ async function geocode(address) {
   if (hasPostal) {
     url = `https://api.neshan.org/v4/geocoding/plus?address=${encodeURIComponent(finalAddress)}`;
   } else {
-    url = `https://api.neshan.org/v4/geocoding?address=${encodeURIComponent(finalAddress)}`;
-  }
+    url = `https://api.neshan.org/geocoding/v1/plus?address=${encodeURIComponent(finalAddress)}`;
 
   const res = await fetch(url, { headers: { "Api-Key": GEO_KEY } });
   if (!res.ok) throw new Error(`Geocoding failed: ${res.status}`);
