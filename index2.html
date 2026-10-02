@@ -131,13 +131,27 @@ function normalizeDigits(text) {
 async function geocode(address) {
   const normalized = normalizeDigits(address);
   const hasPostal = /\b\d{10}\b/.test(normalized);
+  const isJustPostal = /^\s*\d{10}\s*$/.test(normalized);
+
+  let finalAddress = address;
+  
+  // اگه فقط کد پستی بود (بدون آدرس)، «کرج فردیس» رو جلوش اضافه کن
+  if (isJustPostal) {
+    finalAddress = "کرج فردیس " + address;
+  }
 
   let url;
   if (hasPostal) {
-    url = `https://api.neshan.org/v4/geocoding/plus?address=${encodeURIComponent(address)}`;
+    url = `https://api.neshan.org/v4/geocoding/plus?address=${encodeURIComponent(finalAddress)}`;
   } else {
-    url = `https://api.neshan.org/v4/geocoding?address=${encodeURIComponent(address)}`;
+    url = `https://api.neshan.org/v4/geocoding?address=${encodeURIComponent(finalAddress)}`;
   }
+
+  const res = await fetch(url, { headers: { "Api-Key": GEO_KEY } });
+  if (!res.ok) throw new Error(`Geocoding failed: ${res.status}`);
+  const data = await res.json();
+  return { lat: data.location.y, lng: data.location.x };
+}
 
   const res = await fetch(url, { headers: { "Api-Key": GEO_KEY } });
   if (!res.ok) throw new Error(`Geocoding failed: ${res.status}`);
