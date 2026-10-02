@@ -17,12 +17,17 @@
   button.gray { background: #64748b; }
   button.blue { background: #0ea5e9; }
   button.purple { background: #7c3aed; }
+  button.red { background: #ef4444; }
+  .row-btns { display: flex; gap: 8px; }
+  .row-btns button { flex: 1; margin-top: 8px; }
   .status { text-align: center; padding: 10px; font-size: 14px; color: #555; }
   .result-item { background: #f8fafc; border-right: 4px solid #1a5490; padding: 12px; margin-bottom: 8px; border-radius: 6px; display: flex; align-items: center; gap: 10px; }
   .num { background: #1a5490; color: white; min-width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
   .addr { font-size: 14px; line-height: 1.6; word-break: break-word; flex: 1; }
   .gmap-btn { background: #4285f4; padding: 8px 12px; margin: 0; font-size: 12px; width: auto; white-space: nowrap; }
   .hidden { display: none; }
+  #qr-reader { width: 100%; max-width: 400px; margin: 10px auto; border-radius: 10px; overflow: hidden; }
+  .scanner-box { text-align: center; margin-top: 10px; }
   .play-mode { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f0f4f8; z-index: 9999; padding: 20px; overflow-y: auto; }
   .play-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
   .play-header h2 { margin: 0; font-size: 18px; color: #1a5490; }
@@ -52,8 +57,14 @@
       نقطه مبادله امانت پستی پیام، کرج
     </div>
 
-    <label>📝 آدرس‌ها رو وارد کن (هر خط یه آدرس):</label>
-    <textarea id="addresses" placeholder="کرج، عظیمیه، میدان اسبی&#10;کرج، گوهردشت، سه راه&#10;..."></textarea>
+    <label>📝 آدرس‌ها یا کد پستی‌ها (هر خط یکی):</label>
+    <textarea id="addresses" placeholder="کرج فردیس ... کدپستی ۳۱۵۹۹۴۳۷۸۴&#10;یا فقط کد پستی: ۳۱۵۹۹۴۳۷۸۴"></textarea>
+
+    <div class="row-btns">
+      <button class="blue" onclick="startScanner()">📷 شروع اسکن</button>
+      <button class="red" onclick="stopScanner()">⏹ توقف</button>
+    </div>
+    <div id="qr-reader"></div>
 
     <button id="btnFast" onclick="sortAddresses('fast')">⚡ مرتب‌سازی سریع</button>
     <button id="btnAccurate" onclick="sortAddresses('accurate')">🎯 مرتب‌سازی دقیق (کندتر)</button>
@@ -94,6 +105,7 @@
   </div>
 </div>
 
+<script src="https://unpkg.com/html5-qrcode"></script>
 <script>
 const GEO_KEY = "service.a5b2efdc8b074529ab57d17d5c8d14b5";
 const ORIGIN_ADDRESS = "نقطه مبادله امانت پستی پیام، کرج";
@@ -101,16 +113,39 @@ const ORIGIN_ADDRESS = "نقطه مبادله امانت پستی پیام، ک�
 let sortedResults = [];
 let sortedPoints = [];
 let playIndex = 0;
+let scanner = null;
 
+// ============ تبدیل اعداد فارسی به انگلیسی ============
+function normalizeDigits(text) {
+  const persian = "۰۱۲۳۴۵۶۷۸۹";
+  const english = "0123456789";
+  let result = "";
+  for (const ch of text) {
+    const i = persian.indexOf(ch);
+    result += (i !== -1) ? english[i] : ch;
+  }
+  return result;
+}
+
+// ============ Geocoding (عادی یا پلاس) ============
 async function geocode(address) {
-  const url = `https://api.neshan.org/v4/geocoding?address=${encodeURIComponent(address)}`;
+  const normalized = normalizeDigits(address);
+  const hasPostal = /\b\d{10}\b/.test(normalized);
+
+  let url;
+  if (hasPostal) {
+    url = `https://api.neshan.org/v4/geocoding/plus?address=${encodeURIComponent(address)}`;
+  } else {
+    url = `https://api.neshan.org/v4/geocoding?address=${encodeURIComponent(address)}`;
+  }
+
   const res = await fetch(url, { headers: { "Api-Key": GEO_KEY } });
   if (!res.ok) throw new Error(`Geocoding failed: ${res.status}`);
   const data = await res.json();
   return { lat: data.location.y, lng: data.location.x };
 }
 
-// فاصله خط مستقیم
+// ============ محاسبه فاصله ============
 function haversine(p1, p2) {
   const R = 6371;
   const dLat = (p2.lat - p1.lat) * Math.PI / 180;
@@ -119,7 +154,6 @@ function haversine(p1, p2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-// ماتریس فاصله محلی
 function buildLocalMatrix(points) {
   const n = points.length;
   const m = [];
@@ -127,7 +161,6 @@ function buildLocalMatrix(points) {
   return m;
 }
 
-// ماتریس فاصله واقعی از نشان
 async function buildNeshanMatrix(points) {
   const url = "https://api.neshan.org/v4/distance-matrix";
   const body = {
@@ -141,19 +174,17 @@ async function buildNeshanMatrix(points) {
   });
   if (!res.ok) throw new Error(`Distance Matrix failed: ${res.status}`);
   const data = await res.json();
-  // تبدیل به ماتریس فاصله
   const n = points.length;
   const m = [];
   for (let i=0;i<n;i++) {
     m[i] = [];
     for (let j=0;j<n;j++) {
-      m[i][j] = data.rows[i].elements[j].distance.value / 1000; // متر به کیلومتر
+      m[i][j] = data.rows[i].elements[j].distance.value / 1000;
     }
   }
   return m;
 }
 
-// الگوریتم Nearest Neighbor
 function nearestNeighbor(matrix, n) {
   const visited = new Array(n).fill(false);
   const order = [0]; visited[0] = true;
@@ -169,6 +200,41 @@ function nearestNeighbor(matrix, n) {
   return order;
 }
 
+// ============ اسکنر ============
+function startScanner() {
+  const status = document.getElementById("status");
+  if (scanner) return;
+
+  scanner = new Html5Qrcode("qr-reader");
+  const config = { fps: 10, qrbox: { width: 280, height: 160 } };
+
+  scanner.start(
+    { facingMode: "environment" },
+    config,
+    (decodedText) => {
+      const textarea = document.getElementById("addresses");
+      const current = textarea.value.trim();
+      textarea.value = current ? current + "\n" + decodedText : decodedText;
+      textarea.scrollTop = textarea.scrollHeight;
+      status.textContent = `✅ اسکن شد: ${decodedText}`;
+    },
+    () => {}
+  ).catch((err) => {
+    status.textContent = "❌ دوربین باز نشد: " + err;
+    scanner = null;
+  });
+}
+
+function stopScanner() {
+  if (scanner) {
+    scanner.stop().then(() => {
+      scanner = null;
+      document.getElementById("status").textContent = "⏹ اسکن متوقف شد";
+    }).catch(() => { scanner = null; });
+  }
+}
+
+// ============ مرتب‌سازی ============
 async function sortAddresses(mode) {
   const btnFast = document.getElementById("btnFast");
   const btnAcc = document.getElementById("btnAccurate");
@@ -200,16 +266,15 @@ async function sortAddresses(mode) {
 
     let matrix;
     if (mode === 'accurate') {
-      status.textContent = "📊 محاسبه فاصله واقعی جاده‌ها (ممکنه طول بکشه)...";
+      status.textContent = "📊 محاسبه فاصله واقعی...";
       try {
         matrix = await buildNeshanMatrix(points);
       } catch(e) {
-        console.warn("Distance Matrix خطا داد، می‌ریم سراغ روش سریع");
-        status.textContent = "⚠️ روش دقیق خطا داد، از روش سریع استفاده می‌کنیم...";
+        status.textContent = "⚠️ روش دقیق خطا داد، از سریع استفاده می‌کنیم...";
         matrix = buildLocalMatrix(points);
       }
     } else {
-      status.textContent = "📊 محاسبه فاصله (سریع)...";
+      status.textContent = "📊 محاسبه فاصله...";
       matrix = buildLocalMatrix(points);
     }
 
@@ -237,7 +302,7 @@ async function sortAddresses(mode) {
 
     document.getElementById("resultCard").classList.remove("hidden");
     const modeName = mode === 'accurate' ? 'دقیق' : 'سریع';
-    status.textContent = `✅ ${sortedResults.length} آدرس (روش ${modeName}) مرتب شد!`;
+    status.textContent = `✅ ${sortedResults.length} آدرس (${modeName}) مرتب شد!`;
   } catch(e) {
     status.textContent = "❌ خطا: " + e.message;
     console.error(e);
@@ -247,11 +312,13 @@ async function sortAddresses(mode) {
   }
 }
 
+// ============ نقشه گوگل ============
 function openGoogleMapsFor(index) {
   const p = sortedPoints[index];
   window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=driving`, '_blank');
 }
 
+// ============ حالت پخش ============
 function startPlayMode() {
   if (sortedResults.length === 0) return;
   playIndex = 0;
@@ -295,6 +362,7 @@ function exitPlayMode() {
   document.getElementById("mainApp").classList.remove("hidden");
 }
 
+// ============ دانلود CSV ============
 function downloadCSV() {
   let csv = "order,address,lat,lng\n";
   sortedResults.forEach((addr, i) => {
