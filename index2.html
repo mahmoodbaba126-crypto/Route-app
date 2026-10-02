@@ -15,22 +15,31 @@
   button:disabled { background: #94a3b8; }
   button.green { background: #16a34a; }
   button.gray { background: #64748b; }
+  button.blue { background: #0ea5e9; }
   .status { text-align: center; padding: 10px; font-size: 14px; color: #555; }
   .result-item { background: #f8fafc; border-right: 4px solid #1a5490; padding: 12px; margin-bottom: 8px; border-radius: 6px; display: flex; align-items: center; gap: 10px; }
   .num { background: #1a5490; color: white; min-width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
   .addr { font-size: 14px; line-height: 1.6; word-break: break-word; flex: 1; }
-  .nav-btns { display: flex; gap: 5px; }
-  .nav-btns button { width: auto; padding: 6px 10px; margin: 0; font-size: 12px; }
-  .nav-btns .n1 { background: #1a5490; }
-  .nav-btns .n2 { background: #16a34a; }
-  #map { width: 100%; height: 300px; border-radius: 10px; margin-top: 10px; }
+  .gmap-btn { background: #4285f4; padding: 8px 12px; margin: 0; font-size: 12px; width: auto; white-space: nowrap; }
   .hidden { display: none; }
-  .play-mode { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: white; z-index: 9999; padding: 20px; overflow-y: auto; }
-  .play-current { background: #e8f4ff; border: 3px solid #1a5490; border-radius: 12px; padding: 20px; margin: 20px 0; text-align: center; }
-  .play-current .big-num { font-size: 48px; font-weight: bold; color: #1a5490; }
-  .play-current .big-addr { font-size: 18px; margin-top: 15px; line-height: 1.8; }
-  .play-btns { display: flex; gap: 10px; margin-top: 15px; }
-  .play-btns button { flex: 1; }
+
+  /* حالت پخش */
+  .play-mode { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f0f4f8; z-index: 9999; padding: 20px; overflow-y: auto; }
+  .play-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .play-header h2 { margin: 0; font-size: 18px; color: #1a5490; }
+  .exit-btn { background: #ef4444; padding: 10px 16px; width: auto; margin: 0; font-size: 14px; }
+  .counter-badge { background: #1a5490; color: white; padding: 6px 14px; border-radius: 20px; font-size: 14px; font-weight: bold; }
+  .play-card { background: white; border-radius: 16px; padding: 25px; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+  .play-num { font-size: 60px; font-weight: bold; color: #1a5490; line-height: 1; }
+  .play-label { font-size: 14px; color: #888; margin-top: 8px; }
+  .play-addr { font-size: 18px; margin-top: 25px; line-height: 2; padding: 20px; background: #f0f9ff; border-radius: 10px; border: 2px dashed #0ea5e9; min-height: 100px; }
+  .play-actions { margin-top: 25px; display: flex; gap: 10px; }
+  .play-actions button { flex: 1; padding: 18px; font-size: 16px; }
+  .nav-big { background: #4285f4; }
+  .next-big { background: #16a34a; }
+  .finish-msg { text-align: center; padding: 40px 20px; }
+  .finish-msg .emoji { font-size: 80px; }
+  .finish-msg .title { font-size: 24px; font-weight: bold; color: #16a34a; margin-top: 20px; }
 </style>
 </head>
 <body>
@@ -53,39 +62,48 @@
 
   <div class="card hidden" id="resultCard">
     <label>✅ ترتیب بهینه:</label>
-    <div id="map"></div>
     <div id="results" style="margin-top:15px;"></div>
-    <button class="green" onclick="downloadCSV()">📥 دانلود فایل CSV برای Zeo</button>
-    <button class="gray" onclick="startPlayMode()">🚀 شروع پخش (حالت ناوبری)</button>
+    <button class="green" onclick="startPlayMode()">🚀 شروع پخش</button>
+    <button class="gray" onclick="downloadCSV()">📥 دانلود CSV</button>
   </div>
 </div>
 
+<!-- حالت پخش -->
 <div id="playMode" class="play-mode hidden">
-  <div style="display:flex;justify-content:space-between;align-items:center;">
-    <div style="font-weight:bold;font-size:16px;">حالت پخش</div>
-    <button onclick="exitPlayMode()" style="width:auto;padding:8px 14px;background:#ef4444;margin:0;">✕ خروج</button>
+  <div class="play-header">
+    <h2>🚚 حالت پخش</h2>
+    <button class="exit-btn" onclick="exitPlayMode()">✕ خروج</button>
   </div>
-  <div class="play-current">
-    <div class="big-num" id="playNum">1</div>
-    <div style="font-size:14px;color:#666;margin-top:5px;" id="playCounter">از 0</div>
-    <div class="big-addr" id="playAddr">-</div>
+
+  <div style="text-align:center;margin-bottom:15px;">
+    <span class="counter-badge" id="playCounter">1 از 0</span>
   </div>
-  <div class="play-btns">
-    <button class="green" onclick="openNavigation()">🧭 ناوبری</button>
-    <button class="gray" onclick="nextAddress()">بعدی ←</button>
+
+  <div id="playContent">
+    <div class="play-card">
+      <div class="play-num" id="playNum">1</div>
+      <div class="play-label">آدرس فعلی</div>
+      <div class="play-addr" id="playAddr">-</div>
+      <div class="play-actions">
+        <button class="nav-big" onclick="openGoogleMaps()">🧭 ناوبری</button>
+        <button class="next-big" onclick="nextAddress()">بعدی ←</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="playFinish" class="finish-msg hidden">
+    <div class="emoji">🎉</div>
+    <div class="title">همه آدرس‌ها تموم شد!</div>
+    <button class="green" onclick="exitPlayMode()" style="margin-top:30px;">بازگشت</button>
   </div>
 </div>
 
-<script src="https://api.neshan.org/sdk/mapboxgl/v3.2/neshan-sdk.js"></script>
 <script>
 const GEO_KEY = "service.a5b2efdc8b074529ab57d17d5c8d14b5";
-const MAP_KEY = "web.9f44632954c74c718c721fa4ddc700b0";
 const ORIGIN_ADDRESS = "نقطه مبادله امانت پستی پیام، کرج";
 
 let sortedResults = [];
 let sortedPoints = [];
-let originPoint = null;
-let map = null;
 let playIndex = 0;
 
 async function geocode(address) {
@@ -138,7 +156,7 @@ async function sortAddresses() {
   btn.disabled = true;
   try {
     status.textContent = "📍 پیدا کردن انبار...";
-    originPoint = await geocode(ORIGIN_ADDRESS);
+    const originPoint = await geocode(ORIGIN_ADDRESS);
 
     status.textContent = `📍 پیدا کردن ${addresses.length} آدرس...`;
     const points = [originPoint];
@@ -173,17 +191,12 @@ async function sortAddresses() {
       div.innerHTML = `
         <div class="num">${i+1}</div>
         <div class="addr">${addr}</div>
-        <div class="nav-btns">
-          <button class="n1" onclick="navTo(${i},'neshan')">نشان</button>
-          <button class="n2" onclick="navTo(${i},'google')">گوگل</button>
-        </div>`;
+        <button class="gmap-btn" onclick="openGoogleMapsFor(${i})">🗺️</button>`;
       resultsDiv.appendChild(div);
     });
 
     document.getElementById("resultCard").classList.remove("hidden");
     status.textContent = `✅ ${sortedResults.length} آدرس مرتب شد!`;
-
-    drawMap();
   } catch(e) {
     status.textContent = "❌ خطا: " + e.message;
     console.error(e);
@@ -192,81 +205,49 @@ async function sortAddresses() {
   }
 }
 
-function drawMap() {
-  if (map) { map.remove(); map = null; }
-  map = new nmp_mapboxgl.Map({
-    container: 'map',
-    mapType: nmp_mapboxgl.Map.mapTypes.neshanVector,
-    center: [sortedPoints[0].lng, sortedPoints[0].lat],
-    zoom: 12,
-    pitch: 0,
-    minZoom: 8,
-    maxZoom: 18,
-    mapKey: MAP_KEY,
-    poi: false,
-    traffic: false
-  });
-
-  map.on('load', () => {
-    // نقاط آدرس‌ها
-    sortedPoints.forEach((p, i) => {
-      const el = document.createElement('div');
-      el.style.cssText = 'background:#1a5490;color:white;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:14px;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);';
-      el.textContent = (i+1);
-      new nmp_mapboxgl.Marker({ element: el }).setLngLat([p.lng, p.lat]).addTo(map);
-    });
-
-    // انبار
-    const originEl = document.createElement('div');
-    originEl.style.cssText = 'background:#dc2626;color:white;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:18px;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.4);';
-    originEl.textContent = '🏠';
-    new nmp_mapboxgl.Marker({ element: originEl }).setLngLat([originPoint.lng, originPoint.lat]).addTo(map);
-
-    // خط مسیر
-    const lineCoords = [originPoint, ...sortedPoints].map(p => [p.lng, p.lat]);
-    map.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } } });
-    map.addLayer({ id: 'route', type: 'line', source: 'route', paint: { 'line-color': '#1a5490', 'line-width': 3, 'line-opacity': 0.6 } });
-
-    // فیت کردن نقشه
-    const bounds = lineCoords.reduce((b, c) => b.extend(c), new nmp_mapboxgl.LngLatBounds(lineCoords[0], lineCoords[0]));
-    map.fitBounds(bounds, { padding: 40 });
-  });
-}
-
-function navTo(index, provider) {
+function openGoogleMapsFor(index) {
   const p = sortedPoints[index];
-  if (provider === 'neshan') {
-    window.open(`https://neshan.org/maps/navigation/${p.lat},${p.lng}`, '_blank');
-  } else {
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`, '_blank');
-  }
+  window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=driving`, '_blank');
 }
 
+// حالت پخش
 function startPlayMode() {
+  if (sortedResults.length === 0) return;
   playIndex = 0;
   document.getElementById("mainApp").classList.add("hidden");
   document.getElementById("playMode").classList.remove("hidden");
+  document.getElementById("playFinish").classList.add("hidden");
+  document.getElementById("playContent").classList.remove("hidden");
   updatePlayView();
 }
 
 function updatePlayView() {
   if (playIndex >= sortedResults.length) {
-    document.getElementById("playAddr").textContent = "🎉 همه آدرس‌ها تموم شد!";
-    document.getElementById("playNum").textContent = "✓";
-    document.getElementById("playCounter").textContent = "";
+    document.getElementById("playContent").classList.add("hidden");
+    document.getElementById("playFinish").classList.remove("hidden");
     return;
   }
-  document.getElementById("playNum").textContent = (playIndex+1);
-  document.getElementById("playCounter").textContent = `از ${sortedResults.length}`;
+  document.getElementById("playNum").textContent = (playIndex + 1);
+  document.getElementById("playCounter").textContent = `${playIndex + 1} از ${sortedResults.length}`;
   document.getElementById("playAddr").textContent = sortedResults[playIndex];
 }
 
-function nextAddress() { playIndex++; updatePlayView(); }
-
-function openNavigation() {
+function openGoogleMaps() {
   if (playIndex >= sortedResults.length) return;
   const p = sortedPoints[playIndex];
-  window.open(`https://neshan.org/maps/navigation/${p.lat},${p.lng}`, '_blank');
+  window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=driving`, '_blank');
+}
+
+function nextAddress() {
+  playIndex++;
+  updatePlayView();
+  // اگه آدرس بعدی هست، خودکار گوگل مپ رو باز کن
+  if (playIndex < sortedResults.length) {
+    setTimeout(() => {
+      const p = sortedPoints[playIndex];
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=driving`, '_blank');
+    }, 300);
+  }
 }
 
 function exitPlayMode() {
