@@ -16,14 +16,13 @@
   button.green { background: #16a34a; }
   button.gray { background: #64748b; }
   button.blue { background: #0ea5e9; }
+  button.purple { background: #7c3aed; }
   .status { text-align: center; padding: 10px; font-size: 14px; color: #555; }
   .result-item { background: #f8fafc; border-right: 4px solid #1a5490; padding: 12px; margin-bottom: 8px; border-radius: 6px; display: flex; align-items: center; gap: 10px; }
   .num { background: #1a5490; color: white; min-width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
   .addr { font-size: 14px; line-height: 1.6; word-break: break-word; flex: 1; }
   .gmap-btn { background: #4285f4; padding: 8px 12px; margin: 0; font-size: 12px; width: auto; white-space: nowrap; }
   .hidden { display: none; }
-
-  /* حالت پخش */
   .play-mode { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f0f4f8; z-index: 9999; padding: 20px; overflow-y: auto; }
   .play-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
   .play-header h2 { margin: 0; font-size: 18px; color: #1a5490; }
@@ -56,7 +55,8 @@
     <label>📝 آدرس‌ها رو وارد کن (هر خط یه آدرس):</label>
     <textarea id="addresses" placeholder="کرج، عظیمیه، میدان اسبی&#10;کرج، گوهردشت، سه راه&#10;..."></textarea>
 
-    <button id="btnSort" onclick="sortAddresses()">🔄 مرتب کن بر اساس مسیر بهینه</button>
+    <button id="btnFast" onclick="sortAddresses('fast')">⚡ مرتب‌سازی سریع</button>
+    <button id="btnAccurate" onclick="sortAddresses('accurate')">🎯 مرتب‌سازی دقیق (کندتر)</button>
     <div class="status" id="status"></div>
   </div>
 
@@ -68,17 +68,14 @@
   </div>
 </div>
 
-<!-- حالت پخش -->
 <div id="playMode" class="play-mode hidden">
   <div class="play-header">
     <h2>🚚 حالت پخش</h2>
     <button class="exit-btn" onclick="exitPlayMode()">✕ خروج</button>
   </div>
-
   <div style="text-align:center;margin-bottom:15px;">
     <span class="counter-badge" id="playCounter">1 از 0</span>
   </div>
-
   <div id="playContent">
     <div class="play-card">
       <div class="play-num" id="playNum">1</div>
@@ -90,7 +87,6 @@
       </div>
     </div>
   </div>
-
   <div id="playFinish" class="finish-msg hidden">
     <div class="emoji">🎉</div>
     <div class="title">همه آدرس‌ها تموم شد!</div>
@@ -114,6 +110,7 @@ async function geocode(address) {
   return { lat: data.location.y, lng: data.location.x };
 }
 
+// فاصله خط مستقیم
 function haversine(p1, p2) {
   const R = 6371;
   const dLat = (p2.lat - p1.lat) * Math.PI / 180;
@@ -122,13 +119,41 @@ function haversine(p1, p2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-function buildDistanceMatrix(points) {
+// ماتریس فاصله محلی
+function buildLocalMatrix(points) {
   const n = points.length;
   const m = [];
   for (let i=0;i<n;i++){ m[i]=[]; for (let j=0;j<n;j++) m[i][j]=haversine(points[i],points[j]); }
   return m;
 }
 
+// ماتریس فاصله واقعی از نشان
+async function buildNeshanMatrix(points) {
+  const url = "https://api.neshan.org/v4/distance-matrix";
+  const body = {
+    origins: points.map(p => ({ lat: p.lat, lng: p.lng })),
+    destinations: points.map(p => ({ lat: p.lat, lng: p.lng }))
+  };
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Api-Key": GEO_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`Distance Matrix failed: ${res.status}`);
+  const data = await res.json();
+  // تبدیل به ماتریس فاصله
+  const n = points.length;
+  const m = [];
+  for (let i=0;i<n;i++) {
+    m[i] = [];
+    for (let j=0;j<n;j++) {
+      m[i][j] = data.rows[i].elements[j].distance.value / 1000; // متر به کیلومتر
+    }
+  }
+  return m;
+}
+
+// الگوریتم Nearest Neighbor
 function nearestNeighbor(matrix, n) {
   const visited = new Array(n).fill(false);
   const order = [0]; visited[0] = true;
@@ -144,8 +169,9 @@ function nearestNeighbor(matrix, n) {
   return order;
 }
 
-async function sortAddresses() {
-  const btn = document.getElementById("btnSort");
+async function sortAddresses(mode) {
+  const btnFast = document.getElementById("btnFast");
+  const btnAcc = document.getElementById("btnAccurate");
   const status = document.getElementById("status");
   const textarea = document.getElementById("addresses").value.trim();
 
@@ -153,7 +179,9 @@ async function sortAddresses() {
   const addresses = textarea.split("\n").map(a=>a.trim()).filter(a=>a);
   if (addresses.length < 2) { alert("حداقل ۲ تا آدرس!"); return; }
 
-  btn.disabled = true;
+  btnFast.disabled = true;
+  btnAcc.disabled = true;
+
   try {
     status.textContent = "📍 پیدا کردن انبار...";
     const originPoint = await geocode(ORIGIN_ADDRESS);
@@ -170,8 +198,20 @@ async function sortAddresses() {
     }
     if (points.length < 2) throw new Error("هیچ آدرسی پیدا نشد!");
 
-    status.textContent = "📊 محاسبه فاصله‌ها...";
-    const matrix = buildDistanceMatrix(points);
+    let matrix;
+    if (mode === 'accurate') {
+      status.textContent = "📊 محاسبه فاصله واقعی جاده‌ها (ممکنه طول بکشه)...";
+      try {
+        matrix = await buildNeshanMatrix(points);
+      } catch(e) {
+        console.warn("Distance Matrix خطا داد، می‌ریم سراغ روش سریع");
+        status.textContent = "⚠️ روش دقیق خطا داد، از روش سریع استفاده می‌کنیم...";
+        matrix = buildLocalMatrix(points);
+      }
+    } else {
+      status.textContent = "📊 محاسبه فاصله (سریع)...";
+      matrix = buildLocalMatrix(points);
+    }
 
     status.textContent = "🔄 مرتب‌سازی...";
     const order = nearestNeighbor(matrix, points.length);
@@ -196,12 +236,14 @@ async function sortAddresses() {
     });
 
     document.getElementById("resultCard").classList.remove("hidden");
-    status.textContent = `✅ ${sortedResults.length} آدرس مرتب شد!`;
+    const modeName = mode === 'accurate' ? 'دقیق' : 'سریع';
+    status.textContent = `✅ ${sortedResults.length} آدرس (روش ${modeName}) مرتب شد!`;
   } catch(e) {
     status.textContent = "❌ خطا: " + e.message;
     console.error(e);
   } finally {
-    btn.disabled = false;
+    btnFast.disabled = false;
+    btnAcc.disabled = false;
   }
 }
 
@@ -210,7 +252,6 @@ function openGoogleMapsFor(index) {
   window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=driving`, '_blank');
 }
 
-// حالت پخش
 function startPlayMode() {
   if (sortedResults.length === 0) return;
   playIndex = 0;
@@ -241,7 +282,6 @@ function openGoogleMaps() {
 function nextAddress() {
   playIndex++;
   updatePlayView();
-  // اگه آدرس بعدی هست، خودکار گوگل مپ رو باز کن
   if (playIndex < sortedResults.length) {
     setTimeout(() => {
       const p = sortedPoints[playIndex];
