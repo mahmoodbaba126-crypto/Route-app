@@ -43,11 +43,14 @@
   .play-label { font-size: 14px; color: #888; margin-top: 8px; }
   .play-addr { font-size: 18px; margin-top: 25px; line-height: 2; padding: 20px; background: #f0f9ff; border-radius: 10px; border: 2px dashed #0ea5e9; min-height: 100px; }
   .play-phone { font-size: 16px; margin-top: 15px; color: #16a34a; font-weight: bold; }
-  .play-actions { margin-top: 25px; display: flex; gap: 10px; }
-  .play-actions button { flex: 1; padding: 18px; font-size: 16px; }
+  .play-actions { margin-top: 25px; display: flex; flex-direction: column; gap: 10px; }
+  .play-actions button { padding: 16px; font-size: 15px; margin: 0; }
+  .row-play { display: flex; gap: 10px; }
+  .row-play button { flex: 1; }
   .nav-big { background: #4285f4; }
   .call-big { background: #16a34a; }
   .next-big { background: #1a5490; }
+  .next-nav-big { background: #7c3aed; }
   .finish-msg { text-align: center; padding: 40px 20px; }
   .finish-msg .emoji { font-size: 80px; }
   .finish-msg .title { font-size: 24px; font-weight: bold; color: #16a34a; margin-top: 20px; }
@@ -103,10 +106,16 @@
       <div class="play-label">آدرس فعلی</div>
       <div class="play-addr" id="playAddr">-</div>
       <div class="play-phone hidden" id="playPhone"></div>
-      <div class="play-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="nav-big" onclick="openGoogleMaps()" style="flex:1;min-width:100px;">🧭 ناوبری</button>
-        <button class="call-big hidden" id="callBtn" onclick="callCurrent()" style="flex:1;min-width:100px;">📞 تماس</button>
-        <button class="next-big" onclick="nextAddress()" style="flex:1;min-width:100px;">بعدی ←</button>
+      
+      <div class="play-actions">
+        <div class="row-play">
+          <button class="nav-big" onclick="openGoogleMaps()">🧭 ناوبری</button>
+          <button class="call-big hidden" id="callBtn" onclick="callCurrent()">📞 تماس</button>
+        </div>
+        <div class="row-play">
+          <button class="next-big" onclick="nextAddress()">بعدی ←</button>
+          <button class="next-nav-big" onclick="nextWithNav()">بعدی + ناوبری 🧭</button>
+        </div>
       </div>
     </div>
   </div>
@@ -127,9 +136,7 @@ let sortedPoints = [];
 let playIndex = 0;
 let scanner = null;
 
-// جدا کردن آدرس و تلفن با .
 function parseLine(line) {
-  // جداکننده . با فاصله اطرافش
   const parts = line.split(/\s*\.\s*/).map(p => p.trim());
   return {
     address: parts[0] || "",
@@ -335,7 +342,6 @@ function callPhone(phone) {
   window.location.href = `tel:${phone}`;
 }
 
-// رفتن به حالت پخش از یه آدرس خاص
 function goToPlay(index) {
   if (sortedResults.length === 0) return;
   playIndex = index;
@@ -379,6 +385,7 @@ function updatePlayView() {
   }
 }
 
+// ناوبری آدرس فعلی
 function openGoogleMaps() {
   if (playIndex >= sortedResults.length) return;
   const p = sortedPoints[playIndex];
@@ -391,7 +398,14 @@ function callCurrent() {
   if (phone) window.location.href = `tel:${phone}`;
 }
 
+// فقط آدرس بعدی (بدون ناوبری)
 function nextAddress() {
+  playIndex++;
+  updatePlayView();
+}
+
+// آدرس بعدی + ناوبری خودکار
+function nextWithNav() {
   playIndex++;
   updatePlayView();
   if (playIndex < sortedResults.length) {
