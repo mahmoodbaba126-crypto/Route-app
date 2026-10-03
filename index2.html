@@ -11,7 +11,7 @@
   .card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
   label { font-weight: bold; display: block; margin-bottom: 8px; }
   input[type="text"] { width: 100%; padding: 12px; border: 2px solid #cbd5e0; border-radius: 8px; font-family: Tahoma, sans-serif; font-size: 14px; direction: rtl; }
-  textarea { width: 100%; height: 180px; padding: 10px; border: 2px solid #cbd5e0; border-radius: 8px; font-family: Tahoma, sans-serif; font-size: 14px; resize: vertical; direction: rtl; }
+  textarea { width: 100%; height: 250px; padding: 10px; border: 2px solid #cbd5e0; border-radius: 8px; font-family: Tahoma, sans-serif; font-size: 13px; resize: vertical; direction: rtl; white-space: pre; overflow-x: auto; overflow-y: auto; }
   button { width: 100%; padding: 14px; margin-top: 10px; background: #1a5490; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
   button:disabled { background: #94a3b8; }
   button.green { background: #16a34a; }
@@ -23,8 +23,14 @@
   .status { text-align: center; padding: 10px; font-size: 14px; color: #555; }
   .result-item { background: #f8fafc; border-right: 4px solid #1a5490; padding: 12px; margin-bottom: 8px; border-radius: 6px; display: flex; align-items: center; gap: 10px; }
   .num { background: #1a5490; color: white; min-width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
-  .addr { font-size: 14px; line-height: 1.6; word-break: break-word; flex: 1; }
-  .gmap-btn { background: #4285f4; padding: 8px 12px; margin: 0; font-size: 12px; width: auto; white-space: nowrap; }
+  .info { flex: 1; }
+  .addr { font-size: 14px; line-height: 1.6; word-break: break-word; }
+  .phone { font-size: 12px; color: #666; margin-top: 4px; }
+  .actions { display: flex; gap: 5px; flex-direction: column; }
+  .icon-btn { padding: 8px 10px; margin: 0; font-size: 13px; width: auto; white-space: nowrap; }
+  .nav-btn { background: #4285f4; }
+  .call-btn { background: #16a34a; }
+  .go-btn { background: #7c3aed; }
   .hidden { display: none; }
   #qr-reader { width: 100%; max-width: 400px; margin: 10px auto; border-radius: 10px; overflow: hidden; }
   .play-mode { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f0f4f8; z-index: 9999; padding: 20px; overflow-y: auto; }
@@ -36,10 +42,12 @@
   .play-num { font-size: 60px; font-weight: bold; color: #1a5490; line-height: 1; }
   .play-label { font-size: 14px; color: #888; margin-top: 8px; }
   .play-addr { font-size: 18px; margin-top: 25px; line-height: 2; padding: 20px; background: #f0f9ff; border-radius: 10px; border: 2px dashed #0ea5e9; min-height: 100px; }
+  .play-phone { font-size: 16px; margin-top: 15px; color: #16a34a; font-weight: bold; }
   .play-actions { margin-top: 25px; display: flex; gap: 10px; }
   .play-actions button { flex: 1; padding: 18px; font-size: 16px; }
   .nav-big { background: #4285f4; }
-  .next-big { background: #16a34a; }
+  .call-big { background: #16a34a; }
+  .next-big { background: #1a5490; }
   .finish-msg { text-align: center; padding: 40px 20px; }
   .finish-msg .emoji { font-size: 80px; }
   .finish-msg .title { font-size: 24px; font-weight: bold; color: #16a34a; margin-top: 20px; }
@@ -59,8 +67,8 @@
     <label>🏙️ پیش‌فرض آدرس (قابل ویرایش):</label>
     <input type="text" id="prefix" value="البرز، کرج، فردیس" style="margin-bottom:15px;">
 
-    <label>📝 آدرس‌ها (هر خط یکی — فقط محله و خیابون):</label>
-    <textarea id="addresses" placeholder="کانال غربی&#10;بلوار مپنا شهرک ارم&#10;پریسای شرقی"></textarea>
+    <label>📝 آدرس‌ها (هر خط یکی — آدرس . تلفن):</label>
+    <textarea id="addresses" placeholder="کانال غربی . 09121234567&#10;بلوار مپنا شهرک ارم . 09129876543&#10;پریسای شرقی . 09123456789"></textarea>
 
     <div class="row-btns">
       <button class="blue" onclick="startScanner()">📷 شروع اسکن</button>
@@ -94,9 +102,11 @@
       <div class="play-num" id="playNum">1</div>
       <div class="play-label">آدرس فعلی</div>
       <div class="play-addr" id="playAddr">-</div>
-      <div class="play-actions">
-        <button class="nav-big" onclick="openGoogleMaps()">🧭 ناوبری</button>
-        <button class="next-big" onclick="nextAddress()">بعدی ←</button>
+      <div class="play-phone hidden" id="playPhone"></div>
+      <div class="play-actions" style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="nav-big" onclick="openGoogleMaps()" style="flex:1;min-width:100px;">🧭 ناوبری</button>
+        <button class="call-big hidden" id="callBtn" onclick="callCurrent()" style="flex:1;min-width:100px;">📞 تماس</button>
+        <button class="next-big" onclick="nextAddress()" style="flex:1;min-width:100px;">بعدی ←</button>
       </div>
     </div>
   </div>
@@ -117,15 +127,14 @@ let sortedPoints = [];
 let playIndex = 0;
 let scanner = null;
 
-function normalizeDigits(text) {
-  const persian = "۰۱۲۳۴۵۶۷۸۹";
-  const english = "0123456789";
-  let result = "";
-  for (const ch of text) {
-    const i = persian.indexOf(ch);
-    result += (i !== -1) ? english[i] : ch;
-  }
-  return result;
+// جدا کردن آدرس و تلفن با .
+function parseLine(line) {
+  // جداکننده . با فاصله اطرافش
+  const parts = line.split(/\s*\.\s*/).map(p => p.trim());
+  return {
+    address: parts[0] || "",
+    phone: parts[1] || ""
+  };
 }
 
 async function geocode(address) {
@@ -229,17 +238,18 @@ async function sortAddresses(mode) {
   const prefix = document.getElementById("prefix").value.trim();
 
   if (!textarea) { alert("آدرس‌ها رو وارد کن!"); return; }
-  const rawAddresses = textarea.split("\n").map(a=>a.trim()).filter(a=>a);
   
-  // اضافه کردن پیش‌فرض به هر آدرس
-  const addresses = rawAddresses.map(addr => {
-    if (prefix && !addr.includes(prefix)) {
-      return prefix + "، " + addr;
+  const lines = textarea.split("\n").map(a=>a.trim()).filter(a=>a);
+  const parsed = lines.map(parseLine);
+
+  const fullAddresses = parsed.map(item => {
+    if (prefix && !item.address.includes(prefix)) {
+      return prefix + "، " + item.address;
     }
-    return addr;
+    return item.address;
   });
 
-  if (addresses.length < 2) { alert("حداقل ۲ تا آدرس!"); return; }
+  if (fullAddresses.length < 2) { alert("حداقل ۲ تا آدرس!"); return; }
 
   btnFast.disabled = true;
   btnAcc.disabled = true;
@@ -248,15 +258,16 @@ async function sortAddresses(mode) {
     status.textContent = "📍 پیدا کردن انبار...";
     const originPoint = await geocode(ORIGIN_ADDRESS);
 
-    status.textContent = `📍 پیدا کردن ${addresses.length} آدرس...`;
+    status.textContent = `📍 پیدا کردن ${fullAddresses.length} آدرس...`;
     const points = [originPoint];
     const valid = [];
-    for (let i=0;i<addresses.length;i++){
-      status.textContent = `📍 آدرس ${i+1} از ${addresses.length}...`;
+    for (let i=0;i<fullAddresses.length;i++){
+      status.textContent = `📍 آدرس ${i+1} از ${fullAddresses.length}...`;
       try {
-        const p = await geocode(addresses[i]);
-        points.push(p); valid.push(rawAddresses[i]);
-      } catch(e) { console.warn("پیدا نشد:", addresses[i]); }
+        const p = await geocode(fullAddresses[i]);
+        points.push(p); 
+        valid.push({ address: parsed[i].address, phone: parsed[i].phone });
+      } catch(e) { console.warn("پیدا نشد:", fullAddresses[i]); }
     }
     if (points.length < 2) throw new Error("هیچ آدرسی پیدا نشد!");
 
@@ -286,13 +297,20 @@ async function sortAddresses(mode) {
 
     const resultsDiv = document.getElementById("results");
     resultsDiv.innerHTML = "";
-    sortedResults.forEach((addr, i) => {
+    sortedResults.forEach((item, i) => {
       const div = document.createElement("div");
       div.className = "result-item";
       div.innerHTML = `
         <div class="num">${i+1}</div>
-        <div class="addr">${addr}</div>
-        <button class="gmap-btn" onclick="openGoogleMapsFor(${i})">🗺️</button>`;
+        <div class="info">
+          <div class="addr">${item.address}</div>
+          ${item.phone ? `<div class="phone">📞 ${item.phone}</div>` : ''}
+        </div>
+        <div class="actions">
+          <button class="icon-btn nav-btn" onclick="openGoogleMapsFor(${i})">🧭 ناوبری</button>
+          ${item.phone ? `<button class="icon-btn call-btn" onclick="callPhone('${item.phone}')">📞 تماس</button>` : ''}
+          <button class="icon-btn go-btn" onclick="goToPlay(${i})">بعدی ←</button>
+        </div>`;
       resultsDiv.appendChild(div);
     });
 
@@ -313,6 +331,21 @@ function openGoogleMapsFor(index) {
   window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=driving`, '_blank');
 }
 
+function callPhone(phone) {
+  window.location.href = `tel:${phone}`;
+}
+
+// رفتن به حالت پخش از یه آدرس خاص
+function goToPlay(index) {
+  if (sortedResults.length === 0) return;
+  playIndex = index;
+  document.getElementById("mainApp").classList.add("hidden");
+  document.getElementById("playMode").classList.remove("hidden");
+  document.getElementById("playFinish").classList.add("hidden");
+  document.getElementById("playContent").classList.remove("hidden");
+  updatePlayView();
+}
+
 function startPlayMode() {
   if (sortedResults.length === 0) return;
   playIndex = 0;
@@ -329,15 +362,33 @@ function updatePlayView() {
     document.getElementById("playFinish").classList.remove("hidden");
     return;
   }
+  const item = sortedResults[playIndex];
   document.getElementById("playNum").textContent = (playIndex + 1);
   document.getElementById("playCounter").textContent = `${playIndex + 1} از ${sortedResults.length}`;
-  document.getElementById("playAddr").textContent = sortedResults[playIndex];
+  document.getElementById("playAddr").textContent = item.address;
+  
+  const phoneDiv = document.getElementById("playPhone");
+  const callBtn = document.getElementById("callBtn");
+  if (item.phone) {
+    phoneDiv.textContent = `📞 ${item.phone}`;
+    phoneDiv.classList.remove("hidden");
+    callBtn.classList.remove("hidden");
+  } else {
+    phoneDiv.classList.add("hidden");
+    callBtn.classList.add("hidden");
+  }
 }
 
 function openGoogleMaps() {
   if (playIndex >= sortedResults.length) return;
   const p = sortedPoints[playIndex];
   window.open(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=driving`, '_blank');
+}
+
+function callCurrent() {
+  if (playIndex >= sortedResults.length) return;
+  const phone = sortedResults[playIndex].phone;
+  if (phone) window.location.href = `tel:${phone}`;
 }
 
 function nextAddress() {
@@ -357,9 +408,9 @@ function exitPlayMode() {
 }
 
 function downloadCSV() {
-  let csv = "order,address,lat,lng\n";
-  sortedResults.forEach((addr, i) => {
-    csv += `${i+1},"${addr.replace(/"/g,'""')}",${sortedPoints[i].lat},${sortedPoints[i].lng}\n`;
+  let csv = "order,address,phone,lat,lng\n";
+  sortedResults.forEach((item, i) => {
+    csv += `${i+1},"${item.address.replace(/"/g,'""')}","${item.phone}",${sortedPoints[i].lat},${sortedPoints[i].lng}\n`;
   });
   const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
