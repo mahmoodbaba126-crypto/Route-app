@@ -259,11 +259,15 @@ function startVoice() {
   };
 
   voiceRecognition.onend = () => {
-    // اگه هنوز فعاله، دوباره شروع کن
-    if (isVoiceActive) {
-      try { voiceRecognition.start(); } catch(e) {}
-    }
-  };
+  // دیگه خودکار شروع نکن
+  if (isVoiceActive) {
+    // فقط پیام بده که وویس قطع شد
+    document.getElementById("status").textContent = "⏸ وویس موقتاً قطع شد — برای ادامه دوباره بزن";
+    isVoiceActive = false;
+    document.getElementById("voiceBtn").classList.remove("voice-active");
+    document.getElementById("voiceBtn").textContent = "🎤 شروع وویس";
+  }
+};
 
   try {
     voiceRecognition.start();
