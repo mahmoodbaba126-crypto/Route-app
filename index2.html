@@ -18,8 +18,10 @@
   button.gray { background: #64748b; }
   button.blue { background: #0ea5e9; }
   button.red { background: #ef4444; }
-  .row-btns { display: flex; gap: 8px; }
-  .row-btns button { flex: 1; margin-top: 8px; }
+  button.purple { background: #7c3aed; }
+  button.orange { background: #ea580c; }
+  .row-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row-btns button { flex: 1; min-width: 120px; margin-top: 8px; font-size: 14px; }
   .status { text-align: center; padding: 10px; font-size: 14px; color: #555; }
   .result-item { background: #f8fafc; border-right: 4px solid #1a5490; padding: 12px; margin-bottom: 8px; border-radius: 6px; display: flex; align-items: center; gap: 10px; }
   .num { background: #1a5490; color: white; min-width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
@@ -33,6 +35,8 @@
   .go-btn { background: #7c3aed; }
   .hidden { display: none; }
   #qr-reader { width: 100%; max-width: 400px; margin: 10px auto; border-radius: 10px; overflow: hidden; }
+  .voice-active { background: #16a34a !important; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
   .play-mode { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f0f4f8; z-index: 9999; padding: 20px; overflow-y: auto; }
   .play-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
   .play-header h2 { margin: 0; font-size: 18px; color: #1a5490; }
@@ -70,13 +74,18 @@
     <label>🏙️ پیش‌فرض آدرس (قابل ویرایش):</label>
     <input type="text" id="prefix" value="البرز، کرج، فردیس" style="margin-bottom:15px;">
 
-    <label>📝 آدرس‌ها (هر خط یکی — آدرس . تلفن):</label>
-    <textarea id="addresses" placeholder="کانال غربی . 09121234567&#10;بلوار مپنا شهرک ارم . 09129876543&#10;پریسای شرقی . 09123456789"></textarea>
+    <label>📝 آدرس‌ها (هر خط یکی — آخرش تلفن):</label>
+    <textarea id="addresses" placeholder="کانال غربی ۰۹۱۲۳۴۵۶۷۸۹&#10;بلوار مپنا شهرک ارم ۰۹۱۲۹۸۷۶۵۴۳&#10;پریسای شرقی"></textarea>
 
     <div class="row-btns">
-      <button class="blue" onclick="startScanner()">📷 شروع اسکن</button>
-      <button class="red" onclick="stopScanner()">⏹ توقف</button>
+      <button class="blue" onclick="startScanner()">📷 اسکن</button>
+      <button class="red" onclick="stopScanner()">⏹ توقف اسکن</button>
     </div>
+    <div class="row-btns">
+      <button class="green" id="voiceBtn" onclick="toggleVoice()">🎤 شروع وویس</button>
+      <button class="orange" onclick="startOCR()">📷 OCR (عکس)</button>
+    </div>
+    <input type="file" id="ocrInput" accept="image/*" capture="environment" style="display:none;" onchange="handleOCR(event)">
     <div id="qr-reader"></div>
 
     <button id="btnFast" onclick="sortAddresses('fast')">⚡ مرتب‌سازی سریع</button>
@@ -127,23 +136,243 @@
 </div>
 
 <script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
 const GEO_KEY = "service.a5b2efdc8b074529ab57d17d5c8d14b5";
 const ORIGIN_ADDRESS = "نقطه مبادله امانت پستی پیام، کرج";
+const STORAGE_KEY = "route-app-data";
 
 let sortedResults = [];
 let sortedPoints = [];
 let playIndex = 0;
 let scanner = null;
+let voiceRecognition = null;
+let isVoiceActive = false;
 
-function parseLine(line) {
-  const parts = line.split(/\s*\.\s*/).map(p => p.trim());
-  return {
-    address: parts[0] || "",
-    phone: parts[1] || ""
+// ============ ذخیره‌ی خودکار ============
+function saveData() {
+  const data = {
+    addresses: document.getElementById("addresses").value,
+    prefix: document.getElementById("prefix").value,
+    timestamp: Date.now()
   };
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
+function loadData() {
+  const stored = sessionStorage.getItem(STORAGE_KEY);
+  if (stored) {
+    try {
+      const data = JSON.parse(stored);
+      document.getElementById("addresses").value = data.addresses || "";
+      document.getElementById("prefix").value = data.prefix || "البرز، کرج، فردیس";
+    } catch(e) { console.warn(e); }
+  }
+}
+
+// ============ تشخیص خودکار تلفن ============
+function autoDetectPhone(text) {
+  // تبدیل اعداد فارسی به انگلیسی
+  const normalized = normalizeDigits(text);
+  // دنبال شماره ۱۱ رقمی شروع با ۰۹ بگرد
+  const phoneMatch = normalized.match(/(۰?9\d{9}|09\d{9}|9\d{9})/);
+  if (phoneMatch) {
+    const phone = phoneMatch[0].replace(/^۰/, '0');
+    const address = text.replace(phoneMatch[0], '').trim();
+    return address + " . " + phone;
+  }
+  return text;
+}
+
+function normalizeDigits(text) {
+  const persian = "۰۱۲۳۴۵۶۷۸۹";
+  const english = "0123456789";
+  let result = "";
+  for (const ch of text) {
+    const i = persian.indexOf(ch);
+    result += (i !== -1) ? english[i] : ch;
+  }
+  return result;
+}
+
+// ============ وویس ============
+function toggleVoice() {
+  if (isVoiceActive) {
+    stopVoice();
+  } else {
+    startVoice();
+  }
+}
+
+function startVoice() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    alert("مرورگرت از وویس پشتیبانی نمی‌کنه. از Chrome استفاده کن.");
+    return;
+  }
+
+  voiceRecognition = new SpeechRecognition();
+  voiceRecognition.lang = "fa-IR";
+  voiceRecognition.continuous = true;
+  voiceRecognition.interimResults = false;
+
+  voiceRecognition.onresult = (event) => {
+    const last = event.results.length - 1;
+    let transcript = event.results[last][0].transcript.trim();
+    
+    if (!transcript) return;
+
+    const textarea = document.getElementById("addresses");
+    const current = textarea.value.trim();
+
+    // چک کن "بعدی" گفته یا نه
+    if (transcript === "بعدی" || transcript.includes("بعدی")) {
+      // فقط Enter، چیزی تایپ نکن
+      textarea.value = current + "\n";
+      document.getElementById("status").textContent = "⏎ خط بعد";
+      textarea.scrollTop = textarea.scrollHeight;
+      saveData();
+      return;
+    }
+
+    // تشخیص خودکار تلفن
+    const processed = autoDetectPhone(transcript);
+
+    // اضافه کن به متن
+    if (current.length > 0 && !current.endsWith("\n")) {
+      textarea.value = current + "\n" + processed;
+    } else {
+      textarea.value = current + processed;
+    }
+    
+    textarea.scrollTop = textarea.scrollHeight;
+    document.getElementById("status").textContent = `🎤 ${processed}`;
+    saveData();
+  };
+
+  voiceRecognition.onerror = (event) => {
+    console.warn("Voice error:", event.error);
+    if (event.error === "not-allowed") {
+      document.getElementById("status").textContent = "❌ دسترسی به میکروفون داده نشد";
+      stopVoice();
+    }
+  };
+
+  voiceRecognition.onend = () => {
+    // اگه هنوز فعاله، دوباره شروع کن
+    if (isVoiceActive) {
+      try { voiceRecognition.start(); } catch(e) {}
+    }
+  };
+
+  try {
+    voiceRecognition.start();
+    isVoiceActive = true;
+    document.getElementById("voiceBtn").classList.add("voice-active");
+    document.getElementById("voiceBtn").textContent = "🎤 وویس روشن (بزن برای توقف)";
+    document.getElementById("status").textContent = "🎤 آماده‌ی شنیدن...";
+  } catch(e) {
+    console.error(e);
+    alert("خطا در راه‌اندازی وویس: " + e.message);
+  }
+}
+
+function stopVoice() {
+  isVoiceActive = false;
+  if (voiceRecognition) {
+    try { voiceRecognition.stop(); } catch(e) {}
+    voiceRecognition = null;
+  }
+  document.getElementById("voiceBtn").classList.remove("voice-active");
+  document.getElementById("voiceBtn").textContent = "🎤 شروع وویس";
+  document.getElementById("status").textContent = "⏹ وویس متوقف شد";
+}
+
+// ============ OCR ============
+function startOCR() {
+  document.getElementById("ocrInput").click();
+}
+
+async function handleOCR(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const status = document.getElementById("status");
+  status.textContent = "📷 در حال خوندن عکس...";
+
+  try {
+    const result = await Tesseract.recognize(file, "fas+eng", {
+      logger: (m) => {
+        if (m.status === "recognizing text") {
+          status.textContent = `📷 ${Math.round(m.progress * 100)}%`;
+        }
+      }
+    });
+
+    const text = result.data.text.trim();
+    if (!text) {
+      status.textContent = "❌ متنی پیدا نشد";
+      return;
+    }
+
+    // پردازش: هر خط یه آدرس
+    const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 3);
+    const textarea = document.getElementById("addresses");
+    const current = textarea.value.trim();
+    
+    const processed = lines.map(line => autoDetectPhone(line)).join("\n");
+    
+    if (current.length > 0) {
+      textarea.value = current + "\n" + processed;
+    } else {
+      textarea.value = processed;
+    }
+    
+    textarea.scrollTop = textarea.scrollHeight;
+    status.textContent = `✅ ${lines.length} خط از عکس استخراج شد`;
+    saveData();
+  } catch(e) {
+    status.textContent = "❌ خطا: " + e.message;
+    console.error(e);
+  }
+  
+  event.target.value = "";
+}
+
+// ============ اسکنر ============
+function startScanner() {
+  const status = document.getElementById("status");
+  if (scanner) return;
+  scanner = new Html5Qrcode("qr-reader");
+  const config = { fps: 15, qrbox: { width: 350, height: 150 }, aspectRatio: 1.777778 };
+  scanner.start(
+    { facingMode: "environment" },
+    config,
+    (decodedText) => {
+      const textarea = document.getElementById("addresses");
+      const current = textarea.value.trim();
+      textarea.value = current ? current + "\n" + decodedText : decodedText;
+      textarea.scrollTop = textarea.scrollHeight;
+      status.textContent = `✅ اسکن شد: ${decodedText}`;
+      saveData();
+    },
+    () => {}
+  ).catch((err) => {
+    status.textContent = "❌ دوربین باز نشد: " + err;
+    scanner = null;
+  });
+}
+
+function stopScanner() {
+  if (scanner) {
+    scanner.stop().then(() => {
+      scanner = null;
+      document.getElementById("status").textContent = "⏹ اسکن متوقف شد";
+    }).catch(() => { scanner = null; });
+  }
+}
+
+// ============ Geocoding ============
 async function geocode(address) {
   const url = `https://api.neshan.org/v4/geocoding?address=${encodeURIComponent(address)}`;
   const res = await fetch(url, { headers: { "Api-Key": GEO_KEY } });
@@ -206,35 +435,12 @@ function nearestNeighbor(matrix, n) {
   return order;
 }
 
-function startScanner() {
-  const status = document.getElementById("status");
-  if (scanner) return;
-  scanner = new Html5Qrcode("qr-reader");
-  const config = { fps: 15, qrbox: { width: 350, height: 150 }, aspectRatio: 1.777778 };
-  scanner.start(
-    { facingMode: "environment" },
-    config,
-    (decodedText) => {
-      const textarea = document.getElementById("addresses");
-      const current = textarea.value.trim();
-      textarea.value = current ? current + "\n" + decodedText : decodedText;
-      textarea.scrollTop = textarea.scrollHeight;
-      status.textContent = `✅ اسکن شد: ${decodedText}`;
-    },
-    () => {}
-  ).catch((err) => {
-    status.textContent = "❌ دوربین باز نشد: " + err;
-    scanner = null;
-  });
-}
-
-function stopScanner() {
-  if (scanner) {
-    scanner.stop().then(() => {
-      scanner = null;
-      document.getElementById("status").textContent = "⏹ اسکن متوقف شد";
-    }).catch(() => { scanner = null; });
-  }
+function parseLine(line) {
+  const parts = line.split(/\s*\.\s*/).map(p => p.trim());
+  return {
+    address: parts[0] || "",
+    phone: parts[1] || ""
+  };
 }
 
 async function sortAddresses(mode) {
@@ -314,8 +520,8 @@ async function sortAddresses(mode) {
           ${item.phone ? `<div class="phone">📞 ${item.phone}</div>` : ''}
         </div>
         <div class="actions">
-          <button class="icon-btn nav-btn" onclick="openGoogleMapsFor(${i})">🧭 ناوبری</button>
-          ${item.phone ? `<button class="icon-btn call-btn" onclick="callPhone('${item.phone}')">📞 تماس</button>` : ''}
+          <button class="icon-btn nav-btn" onclick="openGoogleMapsFor(${i})">🧭</button>
+          ${item.phone ? `<button class="icon-btn call-btn" onclick="callPhone('${item.phone}')">📞</button>` : ''}
           <button class="icon-btn go-btn" onclick="goToPlay(${i})">بعدی ←</button>
         </div>`;
       resultsDiv.appendChild(div);
@@ -385,7 +591,6 @@ function updatePlayView() {
   }
 }
 
-// ناوبری آدرس فعلی
 function openGoogleMaps() {
   if (playIndex >= sortedResults.length) return;
   const p = sortedPoints[playIndex];
@@ -398,13 +603,11 @@ function callCurrent() {
   if (phone) window.location.href = `tel:${phone}`;
 }
 
-// فقط آدرس بعدی (بدون ناوبری)
 function nextAddress() {
   playIndex++;
   updatePlayView();
 }
 
-// آدرس بعدی + ناوبری خودکار
 function nextWithNav() {
   playIndex++;
   updatePlayView();
@@ -432,6 +635,15 @@ function downloadCSV() {
   a.href = url; a.download = `route-${new Date().toISOString().slice(0,10)}.csv`; a.click();
   URL.revokeObjectURL(url);
 }
+
+// ============ ذخیره‌ی خودکار در تغییرات ============
+document.addEventListener("DOMContentLoaded", () => {
+  loadData();
+  document.getElementById("addresses").addEventListener("input", saveData);
+  document.getElementById("prefix").addEventListener("input", saveData);
+});
+
+window.addEventListener("beforeunload", saveData);
 </script>
 
 </body>
