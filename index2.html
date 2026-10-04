@@ -440,11 +440,37 @@ function nearestNeighbor(matrix, n) {
 }
 
 function parseLine(line) {
-  const parts = line.split(/\s*\.\s*/).map(p => p.trim());
-  return {
-    address: parts[0] || "",
-    phone: parts[1] || ""
-  };
+  // اول اگه . داره، با . جدا کن
+  if (line.includes('.')) {
+    const parts = line.split(/\s*\.\s*/).map(p => p.trim());
+    return {
+      address: parts[0] || "",
+      phone: parts[1] || ""
+    };
+  }
+  
+  // اگه . نداره، خودکار دنبال شماره تلفن بگرد
+  const normalized = normalizeDigits(line);
+  const phoneMatch = normalized.match(/0?9\d{9}/);
+  
+  if (phoneMatch) {
+    let phone = phoneMatch[0];
+    if (!phone.startsWith('0')) phone = '0' + phone;
+    
+    // توی متن اصلی، دنبال این شماره بگرد (با فاصله‌ها)
+    const digits = phone.split('');
+    let pattern = digits.join('[\\s\\.]*');
+    const regex = new RegExp(pattern);
+    
+    const match = line.match(regex);
+    if (match) {
+      const address = line.replace(match[0], '').replace(/[\.\s]+$/, '').trim();
+      return { address: address, phone: phone };
+    }
+  }
+  
+  // اگه تلفن پیدا نشد، همه‌ش آدرس
+  return { address: line, phone: "" };
 }
 
 async function sortAddresses(mode) {
